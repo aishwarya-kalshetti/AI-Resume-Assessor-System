@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { Users, Filter, EyeOff, Eye, ChevronRight, Mail, MessageSquare, Send, X, Bot, Loader2, Upload, GitCompare, Calendar, CheckSquare, Square, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Users, Filter, EyeOff, Eye, ChevronRight, Mail, MessageSquare, Send, X, Bot, Loader2, Upload, GitCompare, Calendar, CheckSquare, Square, FileText, ChevronDown, ChevronUp, Trash2, Award } from 'lucide-react';
 import Scorecard from './Scorecard';
 import ComparisonModal from './ComparisonModal';
 import ScheduleModal from './ScheduleModal';
 import SimulationModal from './SimulationModal';
+import AssessmentReportModal from './AssessmentReportModal';
 
 const RecruiterDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -52,8 +53,12 @@ const RecruiterDashboard: React.FC = () => {
   // Simulation modal state
   const [simulationMatch, setSimulationMatch] = useState<any>(null);
 
+  // Assessment Report modal state
+  const [assessmentReportMatch, setAssessmentReportMatch] = useState<any>(null);
+
   const [copySuccess, setCopySuccess] = useState(false);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRoles();
@@ -142,6 +147,22 @@ const RecruiterDashboard: React.FC = () => {
       setEmailStatus(null);
     }
   };
+  
+  const handleInviteAssessment = async () => {
+    if (!selectedMatch) return;
+    setInviteStatus('sending');
+    try {
+      await axios.post(`http://localhost:5000/api/matches/${selectedMatch._id}/invite-assessment`, {}, {
+        headers: { Authorization: `Bearer ${user?.token}` }
+      });
+      setInviteStatus('sent');
+      setTimeout(() => setInviteStatus(null), 3000);
+    } catch (error: any) {
+      console.error('Invite Error:', error);
+      alert(error.response?.data?.message || 'Failed to send assessment invite');
+      setInviteStatus(null);
+    }
+  };
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -217,7 +238,11 @@ const RecruiterDashboard: React.FC = () => {
   };
 
   const handleScheduled = (result: any) => {
-    setScheduledInterviews(prev => ({ ...prev, [result.matchId]: result }));
+    // result is the updated match object returned from backend
+    setMatches(matches.map(m => m._id === result._id ? result : m));
+    if (selectedMatch && selectedMatch._id === result._id) {
+      setSelectedMatch(result);
+    }
     setScheduleModalMatch(null);
   };
 
@@ -384,6 +409,11 @@ const RecruiterDashboard: React.FC = () => {
                           <span className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">
                             {match.resumeId?.parsedData?.experienceYears || 0}Y Neural Tenure
                           </span>
+                          {match.interviewDate && (
+                            <span className="text-[9px] px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 font-black uppercase tracking-widest">
+                              {new Date(match.interviewDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • {match.interviewTime}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -459,6 +489,11 @@ const RecruiterDashboard: React.FC = () => {
                         <span className="px-4 py-1.5 rounded-full bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 text-[10px] text-blue-600 dark:text-blue-400 font-black uppercase tracking-widest">
                           {selectedMatch.resumeId?.parsedData?.skills?.length || 0} Technical Tokens
                         </span>
+                        {selectedMatch.interviewDate && (
+                          <span className="px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[10px] text-blue-500 font-black uppercase tracking-widest shadow-inner">
+                            {new Date(selectedMatch.interviewDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} • {selectedMatch.interviewTime}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -472,10 +507,23 @@ const RecruiterDashboard: React.FC = () => {
                       <Mail size={18} /> {draftingOutreach ? 'Optimizing...' : 'AI Outreach'}
                     </button>
                     <button
+                      onClick={handleInviteAssessment}
+                      disabled={inviteStatus !== null}
+                      className={`btn-glass flex-1 md:flex-none border-indigo-500/30 text-indigo-400 bg-indigo-500/5 hover:bg-indigo-500/10 py-3.5 ${inviteStatus === 'sent' ? 'bg-indigo-500/20' : ''}`}
+                    >
+                      <Send size={18} /> {inviteStatus === 'sending' ? 'Sending Invite...' : inviteStatus === 'sent' ? 'Invite Sent' : 'Invite Assessment'}
+                    </button>
+                    <button
                       onClick={() => setSimulationMatch(selectedMatch)}
                       className="btn-glass flex-1 md:flex-none border-blue-500/30 text-blue-400 bg-blue-500/5 hover:bg-blue-500/10 py-3.5"
                     >
                       <Bot size={18} /> Sim Mode
+                    </button>
+                    <button
+                      onClick={() => setAssessmentReportMatch(selectedMatch)}
+                      className="btn-glass flex-1 md:flex-none border-emerald-500/30 text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 py-3.5"
+                    >
+                      <Award size={18} /> AI Report
                     </button>
                     <button
                       onClick={() => handleUpdateStatus(selectedMatch._id, 'shortlisted')}
@@ -727,6 +775,8 @@ const RecruiterDashboard: React.FC = () => {
         setScheduleModalMatch={setScheduleModalMatch}
         simulationMatch={simulationMatch}
         setSimulationMatch={setSimulationMatch}
+        assessmentReportMatch={assessmentReportMatch}
+        setAssessmentReportMatch={setAssessmentReportMatch}
         user={user}
         handleScheduled={handleScheduled}
       />
@@ -771,6 +821,8 @@ interface AIModalsProps {
   setScheduleModalMatch: (v: any) => void;
   simulationMatch: any;
   setSimulationMatch: (v: any) => void;
+  assessmentReportMatch: any;
+  setAssessmentReportMatch: (v: any) => void;
   user: any;
   handleScheduled: (result: any) => void;
 }
@@ -780,6 +832,8 @@ const AIModals: React.FC<AIModalsProps> = ({
   setScheduleModalMatch,
   simulationMatch,
   setSimulationMatch,
+  assessmentReportMatch,
+  setAssessmentReportMatch,
   user,
   handleScheduled
 }) => (
@@ -798,6 +852,17 @@ const AIModals: React.FC<AIModalsProps> = ({
       <SimulationModal
         match={simulationMatch}
         onClose={() => setSimulationMatch(null)}
+        token={user?.token || ''}
+      />
+    )}
+
+    {assessmentReportMatch && (
+      <AssessmentReportModal
+        matchId={assessmentReportMatch._id}
+        candidateName={assessmentReportMatch.candidateName || assessmentReportMatch.resumeId?.parsedData?.name || assessmentReportMatch.candidateId?.name || 'Candidate'}
+        interviewDate={assessmentReportMatch.interviewDate}
+        interviewTime={assessmentReportMatch.interviewTime}
+        onClose={() => setAssessmentReportMatch(null)}
         token={user?.token || ''}
       />
     )}

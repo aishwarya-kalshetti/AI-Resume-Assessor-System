@@ -15,7 +15,14 @@ const Login: React.FC = () => {
     try {
       const { data } = await axios.post('http://localhost:5000/api/auth/login', { email, password });
       login(data);
-      navigate('/dashboard');
+      
+      const pendingMatchId = localStorage.getItem('pendingMatchId');
+      if (pendingMatchId) {
+        localStorage.removeItem('pendingMatchId');
+        navigate(`/assessment/${pendingMatchId}`);
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed');
     }

@@ -47,6 +47,7 @@ export const uploadResume = async (req: any, res: Response) => {
         await MatchResult.create({
           candidateId: resume.userId,
           candidateName: finalCandidateName,
+          candidateEmail: parsedData.email,
           resumeId: resume._id,
           roleId: output.role._id,
           overallScore: output.match.overallScore,
@@ -113,6 +114,7 @@ export const batchUploadResumes = async (req: any, res: Response) => {
             await MatchResult.create({
               candidateId: resume.userId,
               candidateName: finalCandidateName,
+              candidateEmail: parsedData.email,
               resumeId: resume._id,
               roleId: output.role._id,
               overallScore: output.match.overallScore,

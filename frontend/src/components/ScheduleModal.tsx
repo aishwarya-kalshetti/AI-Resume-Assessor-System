@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar, Clock, CheckCircle, Loader2 } from 'lucide-react';
+import axios from 'axios';
 
 interface ScheduleModalProps {
   candidateName: string;
@@ -37,18 +38,16 @@ const ScheduleModal: React.FC<ScheduleModalProps> = ({ candidateName, matchId, o
       const displayDate = scheduledAt.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
       const displayTime = scheduledAt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
       const meetSuffix = Math.random().toString(36).substring(2, 9);
+      const meetLink = `https://meet.google.com/xxx-${meetSuffix}`;
 
-      const result = {
-        matchId,
-        candidateName,
-        scheduledAt: scheduledAt.toISOString(),
-        displayDate,
-        displayTime,
-        meetLink: `https://meet.google.com/xxx-${meetSuffix}`,
-        aiReason: `Interview manually scheduled for ${candidateName} on ${displayDate} at ${displayTime}.`,
-        status: 'Scheduled'
-      };
-      onScheduled(result);
+      // Call the backend API
+      const { data } = await axios.post(
+        `http://localhost:5000/api/matches/${matchId}/schedule`,
+        { scheduledAt: scheduledAt.toISOString(), displayDate, displayTime, meetLink },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      onScheduled(data);
     } catch {
       setError('Scheduling failed. Please try again.');
     } finally {

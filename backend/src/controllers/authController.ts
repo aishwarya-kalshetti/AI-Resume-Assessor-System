@@ -1,7 +1,29 @@
 import { Request, Response } from 'express';
 import User from '../models/User';
+import Resume from '../models/Resume';
+import MatchResult from '../models/MatchResult';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+
+const linkOrphanedData = async (userId: string, email: string) => {
+  try {
+    const safeEmail = email.trim().toLowerCase();
+    const emailRegex = new RegExp('^' + safeEmail + '$', 'i');
+
+    // 1. Re-assign any resumes matching this email that don't belong to this user
+    await Resume.updateMany(
+      { userId: { $ne: userId }, 'parsedData.email': emailRegex },
+      { userId }
+    );
+    // 2. Re-assign any match results matching this email that don't belong to this user
+    await MatchResult.updateMany(
+      { candidateEmail: emailRegex },
+      { candidateId: userId }
+    );
+  } catch (error) {
+    console.error('Data linking error:', error);
+  }
+};
 
 const generateToken = (id: string, role: string) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET || 'fallback_secret', {
@@ -29,6 +51,11 @@ export const registerUser = async (req: Request, res: Response) => {
     });
 
     if (user) {
+      // Link any previously uploaded recruiter data for this candidate
+      if (user.role === 'candidate') {
+        await linkOrphanedData(user._id.toString(), email);
+      }
+
       res.status(201).json({
         _id: user._id,
         name: user.name,
@@ -51,6 +78,11 @@ export const loginUser = async (req: Request, res: Response) => {
     const user = await User.findOne({ email });
 
     if (user && (await bcrypt.compare(password, user.password))) {
+      // Periodic check to link data in case something was uploaded while they were away
+      if (user.role === 'candidate') {
+        await linkOrphanedData(user._id.toString(), email);
+      }
+
       res.json({
         _id: user._id,
         name: user.name,

@@ -101,7 +101,7 @@ export const getRoleMatches = async (req: any, res: Response) => {
 export const generateOutreach = async (req: any, res: Response) => {
   try {
     const { matchId } = req.params;
-    const match = await MatchResult.findById(matchId).populate('roleId').populate('candidateId');
+    const match = await MatchResult.findById(matchId).populate('roleId').populate('candidateId').populate('resumeId');
     if (!match) return res.status(404).json({ message: 'Match not found' });
 
     // Check ownership (only the recruiter who created the role can generate outreach)
@@ -115,9 +115,20 @@ export const generateOutreach = async (req: any, res: Response) => {
 
     const emailDraft = await generateOutreachEmail(candidateName, roleTitle, match.overallScore, match.strengths);
 
+    // Robust email resolution:
+    // 1. match.candidateEmail (parsed during matching)
+    // 2. match.resumeId?.parsedData?.email (parsed from resume)
+    // 3. candidate account email (only if the candidate is the user, not a recruiter batch upload)
+    let candidateEmail = match.candidateEmail || (match.resumeId as any)?.parsedData?.email;
+    
+    // If it's a recruiter upload, candidateId points to the recruiter, so don't use it as fallback
+    if (!candidateEmail && (match.candidateId as any)?.role === 'candidate') {
+      candidateEmail = (match.candidateId as any)?.email;
+    }
+
     res.json({
       draft: emailDraft,
-      candidateEmail: match.candidateEmail || (match.candidateId as any)?.email
+      candidateEmail: candidateEmail || 'nomad@talentlens.ai'
     });
   } catch (error) {
     res.status(500).json({ message: 'Error generating outreach text' });
@@ -247,3 +258,100 @@ export const sendOutreach = async (req: any, res: Response) => {
   }
 };
 
+export const inviteToAssessment = async (req: any, res: Response) => {
+  try {
+    const { matchId } = req.params;
+    const match = await MatchResult.findById(matchId).populate('roleId').populate('resumeId');
+    if (!match) return res.status(404).json({ message: 'Match not found' });
+
+    // Verify ownership
+    const role = await JobRole.findById(match.roleId);
+    if (!role || role.createdBy?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    const candidateEmail = match.candidateEmail || (match.resumeId as any)?.parsedData?.email;
+    if (!candidateEmail) {
+      return res.status(400).json({ message: 'Candidate email not found in resume' });
+    }
+
+    const candidateName = match.candidateName || 'Candidate';
+    const roleTitle = (match.roleId as any)?.title || 'Job Opportunity';
+    const companyName = req.user.company || 'TalentLens Partners';
+    
+    // In a real app, this would be the actual production URL
+    const assessmentLink = `http://127.0.0.1:5173/assessment/${matchId}`;
+
+    const subject = `Action Required: Pre-Screening Assessment for ${roleTitle}`;
+    const message = `Hi ${candidateName},
+
+Thank you for your interest in the ${roleTitle} position at ${companyName}.
+
+To move forward with your application, we'd like you to complete a brief voice-based pre-screening assessment. This will help our team better understand your technical background and communication style.
+
+You can start the assessment here: ${assessmentLink}
+
+Please Note: Use the same email (${candidateEmail}) to register or login so we can correctly link your results.
+
+Best regards,
+The ${companyName} Hiring Team`;
+
+    await sendEmail(candidateEmail, subject, message);
+
+    res.json({ message: 'Assessment invitation sent successfully' });
+  } catch (error: any) {
+    console.error('Invite Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to send invite' });
+  }
+};
+
+export const scheduleInterview = async (req: any, res: Response) => {
+  try {
+    const { matchId } = req.params;
+    const { scheduledAt, displayDate, displayTime, meetLink } = req.body;
+
+    const match = await MatchResult.findById(matchId).populate('roleId').populate('resumeId');
+    if (!match) return res.status(404).json({ message: 'Match not found' });
+
+    // Verify ownership
+    const role = await JobRole.findById(match.roleId);
+    if (!role || role.createdBy?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    (match as any).interviewDate = new Date(scheduledAt);
+    (match as any).interviewTime = displayTime;
+    (match as any).interviewMeetLink = meetLink;
+    match.status = 'shortlisted'; // Automatically shortlist when scheduling
+    await match.save();
+
+    const candidateEmail = match.candidateEmail || (match.resumeId as any)?.parsedData?.email;
+    if (candidateEmail) {
+      const candidateName = match.candidateName || 'Candidate';
+      const roleTitle = (match.roleId as any)?.title || 'Job Opportunity';
+      const companyName = req.user.company || 'TalentLens Partners';
+
+      const subject = `Interview Scheduled: ${roleTitle} at ${companyName}`;
+      const message = `Hi ${candidateName},
+
+We are excited to invite you to an interview for the ${roleTitle} position at ${companyName}.
+
+Here are your interview details:
+- Date: ${displayDate}
+- Time: ${displayTime}
+- Meeting Link: ${meetLink}
+
+Please ensure you are in a quiet environment and have a stable internet connection.
+
+Best regards,
+The ${companyName} Hiring Team`;
+
+      await sendEmail(candidateEmail, subject, message);
+    }
+
+    res.json(match);
+  } catch (error: any) {
+    console.error('Schedule Error:', error);
+    res.status(500).json({ message: error.message || 'Failed to schedule interview' });
+  }
+};

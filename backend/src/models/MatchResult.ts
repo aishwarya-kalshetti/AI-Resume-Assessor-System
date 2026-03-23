@@ -22,7 +22,10 @@ const matchResultSchema = new mongoose.Schema({
   matchedSkills: [{ type: String }],
   status: { type: String, enum: ['pending', 'shortlisted', 'rejected', 'recommended'], default: 'pending' },
   flightRisk: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
-  flightRiskProbability: { type: Number, default: 0 }
+  flightRiskProbability: { type: Number, default: 0 },
+  interviewDate: { type: Date },
+  interviewTime: { type: String },
+  interviewMeetLink: { type: String }
 }, { timestamps: true });
 
 export default mongoose.model('MatchResult', matchResultSchema);

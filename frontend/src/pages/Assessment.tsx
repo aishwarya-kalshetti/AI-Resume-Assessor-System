@@ -12,15 +12,23 @@ const Assessment: React.FC = () => {
   const [assessment, setAssessment] = useState<any>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [finalDuration, setFinalDuration] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!user) {
+      if (matchId) localStorage.setItem('pendingMatchId', matchId);
+      navigate('/login');
+      return;
+    }
     generateAndFetch();
-  }, [matchId]);
+  }, [matchId, user]);
 
   const generateAndFetch = async () => {
     try {
@@ -52,6 +60,10 @@ const Assessment: React.FC = () => {
 
       mediaRecorder.start();
       setIsRecording(true);
+      setRecordingDuration(0);
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
     } catch (err) {
       alert("Microphone access is required for the AI assessment simulation.");
       console.error(err);
@@ -61,6 +73,8 @@ const Assessment: React.FC = () => {
   const stopRecording = () => {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+    clearInterval(timerRef.current);
+    setFinalDuration(recordingDuration);
   };
 
   const handleSubmitAnswer = async () => {
@@ -69,7 +83,6 @@ const Assessment: React.FC = () => {
     setSubmitting(true);
     const formData = new FormData();
     formData.append('questionId', assessment.questions[currentQ].questionId);
-    formData.append('transcription', 'AI mock transcription: Candidate detailed their approach confidently.');
     
     if (audioBlob) {
       formData.append('audio', audioBlob, 'answer.webm');
@@ -84,6 +97,8 @@ const Assessment: React.FC = () => {
       });
       setAssessment(data);
       setAudioBlob(null);
+      setRecordingDuration(0);
+      setFinalDuration(0);
       
       // Move to the next question (which might have been newly created by AI)
       setCurrentQ(prev => prev + 1);
@@ -115,16 +130,43 @@ const Assessment: React.FC = () => {
           The recruiter will review your profile based on your match score and verified technical depth.
         </p>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#0d1117] p-8 rounded-xl border border-gray-800 shadow-inner mb-10 text-left">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-6 bg-[#0d1117] p-8 rounded-xl border border-gray-800 shadow-inner mb-6 text-left">
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
-            <span className="text-xs text-gray-500 uppercase tracking-widest font-bold block mb-2">Comm. Score</span>
-            <span className="text-4xl font-black text-blue-400">{Math.round(assessment.communicationScore)}%</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Comm. Score</span>
+            <span className="text-3xl font-black text-blue-400">{Math.round(assessment.communicationScore)}%</span>
           </div>
           <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
-            <span className="text-xs text-gray-500 uppercase tracking-widest font-bold block mb-2">Tech Insights</span>
-            <span className="text-4xl font-black text-purple-400">{Math.round(assessment.technicalScore)}%</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Tech Insights</span>
+            <span className="text-3xl font-black text-purple-400">{Math.round(assessment.technicalScore)}%</span>
+          </div>
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Tech Depth</span>
+            <span className="text-3xl font-black text-amber-400">{Math.round(assessment.technicalDepth || 0)}%</span>
+          </div>
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Problem Solving</span>
+            <span className="text-3xl font-black text-red-400">{Math.round(assessment.problemSolving || 0)}%</span>
+          </div>
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Professionalism</span>
+            <span className="text-3xl font-black text-pink-400">{Math.round(assessment.professionalism || 0)}%</span>
+          </div>
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
+            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold block mb-1">Overall</span>
+            <span className="text-3xl font-black text-white">{Math.round(assessment.overallAssessmentScore)}%</span>
           </div>
         </div>
+
+        {assessment.aiSummary && (
+          <div className="bg-blue-500/5 border border-blue-500/10 p-6 rounded-xl mb-10 text-left">
+             <h4 className="text-blue-400 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
+               <AlertCircle size={14} /> AI Performance Summary
+             </h4>
+             <p className="text-gray-300 text-sm leading-relaxed italic">
+               "{assessment.aiSummary}"
+             </p>
+          </div>
+        )}
 
         <button 
           onClick={() => navigate('/dashboard')}
@@ -187,7 +229,6 @@ const Assessment: React.FC = () => {
                     </button>
                   </div>
                   <span className="text-gray-300 font-semibold mb-2">Click microphone to record your answer</span>
-                  <span className="text-sm text-gray-500">Maximum 2 minutes length</span>
                 </div>
               )}
             </>
@@ -203,12 +244,18 @@ const Assessment: React.FC = () => {
                   <Play fill="currentColor" size={20} />
                 </button>
                 <div className="w-full h-2 bg-gray-800 rounded-full overflow-hidden relative">
-                  <div className="absolute top-0 left-0 w-1/3 h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></div>
+                  <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"></div>
                 </div>
-                <span className="text-sm text-gray-400 font-bold font-mono shrink-0">0:45</span>
+                <span className="text-sm text-gray-400 font-bold font-mono shrink-0">
+                  {Math.floor(finalDuration / 60)}:{(finalDuration % 60).toString().padStart(2, '0')}
+                </span>
               </div>
               <button 
-                onClick={() => setAudioBlob(null)}
+                onClick={() => {
+                  setAudioBlob(null);
+                  setRecordingDuration(0);
+                  setFinalDuration(0);
+                }}
                 className="text-sm text-gray-500 hover:text-white transition-colors underline underline-offset-4"
               >
                 Discard and Re-record

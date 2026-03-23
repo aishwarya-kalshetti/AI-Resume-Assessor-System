@@ -10,7 +10,9 @@ import {
   autoTailorResume,
   updateMatchStatus,
   deleteMatch,
-  sendOutreach
+  sendOutreach,
+  inviteToAssessment,
+  scheduleInterview
 } from '../controllers/matchController';
 
 const router = express.Router();
@@ -23,5 +25,7 @@ router.post('/:matchId/tailor', protect, autoTailorResume);
 router.patch('/:matchId/status', protect, updateMatchStatus);
 router.delete('/:matchId', protect, deleteMatch);
 router.post('/:matchId/send-outreach', protect, sendOutreach);
+router.post('/:matchId/invite-assessment', protect, inviteToAssessment);
+router.post('/:matchId/schedule', protect, scheduleInterview);
 
 export default router;
